@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>honest-rl-bench dashboard</title>
+<style>
+  :root{--bg:#0e0f12;--panel:#161922;--fg:#dbe1eb;--muted:#7e8ba0;--accent:#4ec9b0;--warn:#e0a44c;--bad:#e15c5c;--good:#7dd87b;--line:#2a2f3b;}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:var(--bg);color:var(--fg);font-size:13px}
+  header{padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:18px}
+  header h1{margin:0;font-size:16px;font-weight:600}
+  header .meta{color:var(--muted);font-size:12px}
+  .container{padding:14px 18px;max-width:1500px;margin:0 auto}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:14px;padding:12px 16px}
+  section h2{font-size:13px;font-weight:600;margin:0 0 10px 0;color:var(--accent);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+  .refresh-btn{font-size:11px;padding:2px 8px;background:#2a3346;color:var(--fg);border:1px solid var(--line);border-radius:3px;cursor:pointer;margin-left:auto}
+  .refresh-btn:hover{background:#36405a}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:500}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+  .ci{color:var(--muted);font-size:11px}
+  .flag{background:#54391c;color:var(--warn);border-radius:10px;padding:1px 7px;font-size:11px;margin-right:4px}
+  .sig{background:#1f3d22;color:var(--good);border-radius:10px;padding:1px 7px;font-size:11px}
+  .ns{color:var(--muted);font-size:11px}
+  #curves{width:100%;height:500px}
+  select,input{background:#222a3b;color:var(--fg);border:1px solid var(--line);border-radius:3px;padding:3px 6px}
+  .filter-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .small{font-size:11px;color:var(--muted)}
+  .cmp-result{margin-top:8px;font-size:12px;line-height:1.7}
+</style></head><body>
+<header>
+  <h1>honest-rl-bench</h1>
+  <span class="meta">runs: <span class="mono">{{ runs_dir }}</span> · auto-refresh 15s · <span id="ts">—</span></span>
+  <span class="meta" style="margin-left:auto">peak <b>and</b> final · IQM ± 95% bootstrap CI</span>
+</header>
+<div class="container">
+
+  <section><h2>Learning Curves
+    <button class="refresh-btn" onclick="loadCurves()">&#x21bb; refresh</button></h2>
+    <div class="small filter-row">
+      <label>View:
+        <label style="margin-left:4px"><input type="radio" name="curve-mode" value="iqm" checked> IQM ± CI band</label>
+        <label style="margin-left:6px"><input type="radio" name="curve-mode" value="seeds"> per-seed</label>
+        <label style="margin-left:6px"><input type="radio" name="curve-mode" value="both"> both</label>
+      </label>
+      <span id="curves-count" class="small"></span>
+    </div>
+    <div id="curves"></div>
+  </section>
+
+  <section><h2>Peak vs Final <span class="small">(the trap: report final, not peak)</span>
+    <button class="refresh-btn" onclick="loadSummary()">&#x21bb; refresh</button></h2>
+    <table id="summary-table"><thead>
+      <tr><th>group</th><th>n seeds</th><th>peak IQM [95% CI]</th><th>final IQM [95% CI]</th><th>peak−final</th><th>flags</th></tr>
+    </thead><tbody></tbody></table>
+  </section>
+
+  <section><h2>A/B Paired Comparison
+    <button class="refresh-btn" onclick="runCompare()">compare</button></h2>
+    <div class="small filter-row">
+      A <select id="cmp-a"></select>
+      vs B <select id="cmp-b"></select>
+      <span class="small">paired-difference bootstrap on per-seed Δ (A−B); significant ⇔ 95% CI excludes 0</span>
+    </div>
+    <div id="cmp-result" class="cmp-result small">pick two groups and press compare.</div>
+  </section>
+
+</div>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const PALETTE = ['#4ec9b0','#e0a44c','#7dd87b','#e15c5c','#9b7de8','#64b5f6','#f48fb1','#a5d6a7','#ffcc80','#80deea'];
+const _colorCache = {};
+function color(name){ if(!(name in _colorCache)){ _colorCache[name]=PALETTE[Object.keys(_colorCache).length%PALETTE.length]; } return _colorCache[name]; }
+function fmt(v,nd=1){ return (v==null||Number.isNaN(v))?'—':v.toFixed(nd); }
+function curveMode(){ return document.querySelector('input[name="curve-mode"]:checked').value; }
+
+function loadCurves(){
+  fetch('/api/curves').then(r=>r.json()).then(j=>{
+    $('#ts').textContent = new Date().toLocaleTimeString();
+    const mode = curveMode();
+    const traces = [];
+    (j.groups||[]).forEach(g=>{
+      const col = color(g.group);
+      if (mode==='seeds' || mode==='both'){
+        g.seeds.forEach(s=>{
+          traces.push({x:s.steps, y:s.returns, type:'scattergl', mode:'lines',
+            name:`${g.group} s${s.seed}`, legendgroup:g.group, showlegend:(mode==='seeds'),
+            line:{width:1, color:col+'55'},
+            hovertemplate:`<b>${g.group}</b> s${s.seed}<br>step %{x:,d} → %{y:.1f}<extra></extra>`});
+        });
+      }
+      if (mode==='iqm' || mode==='both'){
+        traces.push({x:g.grid, y:g.ci_lo, type:'scatter', mode:'lines', showlegend:false,
+          line:{color:'transparent'}, hoverinfo:'skip', legendgroup:g.group});
+        traces.push({x:g.grid, y:g.ci_hi, type:'scatter', mode:'lines', fill:'tonexty',
+          fillcolor:col+'2e', line:{color:'transparent'}, showlegend:false, hoverinfo:'skip', legendgroup:g.group});
+        traces.push({x:g.grid, y:g.iqm, type:'scatter', mode:'lines',
+          name:`${g.group} (IQM, n=${g.n_seeds})`, legendgroup:g.group,
+          line:{color:col, width:2.5},
+          hovertemplate:`<b>${g.group}</b> IQM<br>step %{x:,d} → %{y:.1f}<extra></extra>`});
+      }
+    });
+    $('#curves-count').textContent = `${(j.groups||[]).length} group(s)`;
+    Plotly.react('curves', traces, {
+      paper_bgcolor:'#161922', plot_bgcolor:'#161922', font:{color:'#dbe1eb',size:11},
+      xaxis:{title:'step', gridcolor:'#2a2f3b'}, yaxis:{title:'return', gridcolor:'#2a2f3b'},
+      margin:{l:55,r:20,t:20,b:42}, legend:{font:{size:10},x:1.02,y:1}, showlegend:true,
+    }, {displaylogo:false, responsive:true});
+  });
+}
+
+function loadSummary(){
+  fetch('/api/summary').then(r=>r.json()).then(j=>{
+    const tb = $('#summary-table tbody'); tb.innerHTML='';
+    const groups = [];
+    (j.rows||[]).forEach(r=>{
+      groups.push(r.group);
+      const flags = [];
+      if (r.low_seeds) flags.push(`<span class="flag">n&lt;${j.min_seeds} seeds</span>`);
+      if (r.peak_final_gap) flags.push('<span class="flag">peak&gt;&gt;final</span>');
+      const peak = `${fmt(r.peak_iqm)} <span class="ci">[${fmt(r.peak_lo)}, ${fmt(r.peak_hi)}]</span>`;
+      const fin = `${fmt(r.final_iqm)} <span class="ci">[${fmt(r.final_lo)}, ${fmt(r.final_hi)}]</span>`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="mono" style="color:${color(r.group)}">${r.group}</td>
+        <td>${r.n_seeds}</td><td>${peak}</td><td>${fin}</td><td>${fmt(r.gap)}</td><td>${flags.join(' ')}</td>`;
+      tb.appendChild(tr);
+    });
+    populateCompare(groups);
+  });
+}
+
+function populateCompare(groups){
+  const a=$('#cmp-a'), b=$('#cmp-b');
+  if (a.options.length===groups.length && [...a.options].every((o,i)=>o.value===groups[i])) return;
+  const prevA=a.value, prevB=b.value;
+  a.innerHTML=''; b.innerHTML='';
+  groups.forEach(g=>{
+    a.appendChild(new Option(g,g)); b.appendChild(new Option(g,g));
+  });
+  a.value = prevA || groups[0] || '';
+  b.value = prevB || groups[1] || groups[0] || '';
+}
+
+function runCompare(){
+  const a=$('#cmp-a').value, b=$('#cmp-b').value;
+  if(!a||!b){ return; }
+  fetch(`/api/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`).then(r=>r.json()).then(j=>{
+    const el=$('#cmp-result');
+    if (j.error){ el.innerHTML=`<span class="flag">${j.error}</span>`; return; }
+    function row(metric){
+      const d=j[metric];
+      if(!d || d.n_pairs===0) return `<div><b>${metric}</b>: no shared seeds</div>`;
+      const sig = d.significant ? '<span class="sig">significant</span>' : '<span class="ns">not significant</span>';
+      return `<div><b>${metric}</b>: Δ(A−B) = ${fmt(d.diff)} <span class="ci">[${fmt(d.lo)}, ${fmt(d.hi)}]</span>
+        · P(A&gt;B)=${fmt(d.prob_a_better,2)} · n_pairs=${d.n_pairs} · ${sig}</div>`;
+    }
+    el.innerHTML = `<div style="margin-bottom:4px">${a} <span class="ci">vs</span> ${b}
+      <span class="ci">(paired seeds: ${(j.paired_seeds||[]).join(', ')||'none'})</span></div>`
+      + row('peak') + row('final');
+  });
+}
+
+document.querySelectorAll('input[name="curve-mode"]').forEach(el=>el.addEventListener('change', loadCurves));
+loadCurves(); loadSummary();
+setInterval(()=>{ loadCurves(); loadSummary(); }, 15000);
+</script>
+</body></html>

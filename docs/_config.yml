@@ -1,0 +1,34 @@
+theme: minima
+title: honest-rl-bench
+description: >-
+  An honest RL / MARL benchmarking toolkit and a practical tutorial on doing it
+  right: report uncertainty (IQM + stratified bootstrap CIs), report peak AND
+  final, avoid cherry-picking, handle MARL non-transitivity and continual-RL
+  forgetting, and mechanism-check before you fan out.
+baseurl: "/honest-rl-bench"
+url: "https://suuttt.github.io"
+
+# minima nav
+header_pages:
+  - statistics.md
+  - cherry-picking.md
+  - marl.md
+  - catastrophic-forgetting.md
+  - mechanism-check.md
+
+minima:
+  nav_pages:
+    - statistics.md
+    - cherry-picking.md
+    - marl.md
+    - catastrophic-forgetting.md
+    - mechanism-check.md
+
+# Build hygiene
+markdown: kramdown
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
+plugins:
+  - jekyll-seo-tag
