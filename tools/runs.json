@@ -1,0 +1,41 @@
+{
+  "_comment": "Manually maintained run + queue registry. update_dashboard.py merges this with live GPU probes into docs/assets/dashboard.json.",
+  "runs": [
+    {
+      "project": "struct-mamba",
+      "box": "40230626 (ssh5:30627, A4000)",
+      "what": "StructMamba PEMS04/07/08 grid: 4 horizons x 3 seeds, canonical TSLib protocol",
+      "status": "running",
+      "progress": "PEMS04 pred-12/24 done (0.0738 / 0.0919); pred-48/96 + PEMS07/08 remaining",
+      "log": "/root/structmamba.log"
+    },
+    {
+      "project": "struct-mamba",
+      "box": "40424707 (ssh1:24707)",
+      "what": "StructMamba PEMS03 grid: 4 horizons x 3 seeds",
+      "status": "done",
+      "progress": "MSE 0.0635 / 0.0839 / 0.1247 / 0.1878 (pred-12/24/48/96) - beats S-Mamba published at every horizon",
+      "log": "/root/sm_pems03.log"
+    }
+  ],
+  "queue": [
+    {
+      "project": "ts-bench-audit",
+      "what": "Phase 1: self-run CrossFormer, S-Mamba, DMamba, PatchTST, TimesNet, DLinear under ONE canonical protocol (TSLib seq-96, 3 seeds) on PEMS03/04/07/08 x 4 horizons",
+      "target_boxes": "40230497 (3060), 40121712 (5060 GPU co-tenant), 22734 (3070, short runs only)",
+      "blocked_on": "staging audit scripts; verify S-Mamba/DMamba code availability"
+    },
+    {
+      "project": "struct-mamba",
+      "what": "Phase 2 ablations: SE-ordered scan, hierarchical SE masks, SE-adaptive k (PEMS04+08, pred-12/96, 3 seeds per variant)",
+      "target_boxes": "free box after PEMS grid completes",
+      "blocked_on": "Phase 1 baseline numbers"
+    },
+    {
+      "project": "ts-bench-audit",
+      "what": "Protocol-inflation axis: rerun top-3 methods at their published configs to quantify config vs architecture effects",
+      "target_boxes": "TBD",
+      "blocked_on": "Phase 1"
+    }
+  ]
+}

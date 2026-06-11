@@ -1,0 +1,98 @@
+{
+ "generated": "2026-06-11 14:32 UTC",
+ "fleet": [
+  {
+   "instance": "40230626",
+   "endpoint": "ssh5.vast.ai:30627",
+   "gpu": "NVIDIA GeForce RTX 3060",
+   "cores": null,
+   "project": "struct-mamba",
+   "note": "PEMS04/07/08 grid",
+   "util": "100 %",
+   "mem": "1690 MiB / 12288 MiB",
+   "reachable": true
+  },
+  {
+   "instance": "40424707",
+   "endpoint": "ssh1.vast.ai:24707",
+   "gpu": "NVIDIA GeForce RTX 3060",
+   "cores": null,
+   "project": "struct-mamba",
+   "note": "PEMS03 grid done 2026-06-11",
+   "util": "0 %",
+   "mem": "9 MiB / 12288 MiB",
+   "reachable": true
+  },
+  {
+   "instance": "40230497",
+   "endpoint": "ssh8.vast.ai:30497",
+   "gpu": "NVIDIA GeForce RTX 3060",
+   "cores": 12,
+   "project": "ts-bench-audit",
+   "note": "handed over by mahjong 2026-06-11",
+   "util": "0 %",
+   "mem": "25 MiB / 12288 MiB",
+   "reachable": true
+  },
+  {
+   "instance": "40121712",
+   "endpoint": "ssh2.vast.ai:11713",
+   "gpu": "NVIDIA GeForce RTX 5060",
+   "cores": 28,
+   "project": "mahjong-eval + ts-bench-audit",
+   "note": "mahjong keeps CPUs until 06-14; GPU co-tenant",
+   "util": "0 %",
+   "mem": "1 MiB / 8151 MiB",
+   "reachable": true
+  },
+  {
+   "instance": "22734",
+   "endpoint": "ssh5.vast.ai:22734",
+   "gpu": "NVIDIA GeForce RTX 3070 Laptop GPU",
+   "cores": 16,
+   "project": "ts-bench-audit",
+   "note": "KNOWN FLAKY - short runs only",
+   "util": "0 %",
+   "mem": "8 MiB / 8192 MiB",
+   "reachable": true
+  }
+ ],
+ "runs": [
+  {
+   "project": "struct-mamba",
+   "box": "40230626 (ssh5:30627, A4000)",
+   "what": "StructMamba PEMS04/07/08 grid: 4 horizons x 3 seeds, canonical TSLib protocol",
+   "status": "running",
+   "progress": "PEMS04 pred-12/24 done (0.0738 / 0.0919); pred-48/96 + PEMS07/08 remaining",
+   "log": "/root/structmamba.log"
+  },
+  {
+   "project": "struct-mamba",
+   "box": "40424707 (ssh1:24707)",
+   "what": "StructMamba PEMS03 grid: 4 horizons x 3 seeds",
+   "status": "done",
+   "progress": "MSE 0.0635 / 0.0839 / 0.1247 / 0.1878 (pred-12/24/48/96) - beats S-Mamba published at every horizon",
+   "log": "/root/sm_pems03.log"
+  }
+ ],
+ "queue": [
+  {
+   "project": "ts-bench-audit",
+   "what": "Phase 1: self-run CrossFormer, S-Mamba, DMamba, PatchTST, TimesNet, DLinear under ONE canonical protocol (TSLib seq-96, 3 seeds) on PEMS03/04/07/08 x 4 horizons",
+   "target_boxes": "40230497 (3060), 40121712 (5060 GPU co-tenant), 22734 (3070, short runs only)",
+   "blocked_on": "staging audit scripts; verify S-Mamba/DMamba code availability"
+  },
+  {
+   "project": "struct-mamba",
+   "what": "Phase 2 ablations: SE-ordered scan, hierarchical SE masks, SE-adaptive k (PEMS04+08, pred-12/96, 3 seeds per variant)",
+   "target_boxes": "free box after PEMS grid completes",
+   "blocked_on": "Phase 1 baseline numbers"
+  },
+  {
+   "project": "ts-bench-audit",
+   "what": "Protocol-inflation axis: rerun top-3 methods at their published configs to quantify config vs architecture effects",
+   "target_boxes": "TBD",
+   "blocked_on": "Phase 1"
+  }
+ ]
+}
